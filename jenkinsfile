@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "satya1031/myapp"
-        DOCKER_TAG = "${BUILD_NUMBER}"
+        IMAGE_NAME = "satya1031/myapp"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -12,7 +12,6 @@ pipeline {
             steps {
                 checkout scmGit(
                     branches: [[name: '*/master']],
-                    extensions: [],
                     userRemoteConfigs: [[
                         credentialsId: 'gitcred',
                         url: 'https://github.com/satya1031/spring-mvc-angular-js-hibernate-bootstrap-java-single-page-jwt-auth-rest-api-webapp-framework.git'
@@ -21,15 +20,15 @@ pipeline {
             }
         }
 
-        stage('Build Jar') {
+        stage('Build WAR/JAR') {
             steps {
                 sh 'mvn clean package -DskipTests'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Image (Podman)') {
             steps {
-                sh 'docker build -t $DOCKER_IMAGE:$DOCKER_TAG .'
+                sh 'podman build --format docker -t $IMAGE_NAME:$IMAGE_TAG .'
             }
         }
 
@@ -40,23 +39,23 @@ pipeline {
                     usernameVariable: 'USER',
                     passwordVariable: 'PASS'
                 )]) {
-                    sh 'echo $PASS | docker login -u $USER --password-stdin'
+                    sh 'echo $PASS | podman login -u $USER --password-stdin docker.io'
                 }
             }
         }
 
         stage('Push Image') {
             steps {
-                sh 'docker push $DOCKER_IMAGE:$DOCKER_TAG'
+                sh 'podman push $IMAGE_NAME:$IMAGE_TAG'
             }
         }
 
         stage('Deploy Container') {
             steps {
                 sh '''
-                docker stop myapp || true
-                docker rm myapp || true
-                docker run -d -p 8080:8080 --name myapp $DOCKER_IMAGE:$DOCKER_TAG
+                podman stop myapp || true
+                podman rm myapp || true
+                podman run -d -p 8080:8080 --name myapp $IMAGE_NAME:$IMAGE_TAG
                 '''
             }
         }
