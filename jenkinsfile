@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "satya1031/myapp"
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        DOCKER_IMAGE = "satya1031/myapp"
+        DOCKER_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -20,15 +20,15 @@ pipeline {
             }
         }
 
-        stage('Build WAR/JAR') {
+        stage('Build Application') {
             steps {
                 sh 'mvn clean package -DskipTests'
             }
         }
 
-        stage('Build Image (Podman)') {
+        stage('Build Docker Image') {
             steps {
-                sh 'podman build --format docker -t $IMAGE_NAME:$IMAGE_TAG .'
+                sh 'docker build -t $DOCKER_IMAGE:$DOCKER_TAG .'
             }
         }
 
@@ -39,23 +39,22 @@ pipeline {
                     usernameVariable: 'USER',
                     passwordVariable: 'PASS'
                 )]) {
-                    sh 'echo $PASS | podman login -u $USER --password-stdin docker.io'
+                    sh 'echo $PASS | docker login -u $USER --password-stdin'
                 }
             }
         }
 
         stage('Push Image') {
             steps {
-                sh 'podman push $IMAGE_NAME:$IMAGE_TAG'
+                sh 'docker push $DOCKER_IMAGE:$DOCKER_TAG'
             }
         }
 
         stage('Deploy Container') {
             steps {
                 sh '''
-                podman stop myapp || true
-                podman rm myapp || true
-                podman run -d -p 8080:8080 --name myapp $IMAGE_NAME:$IMAGE_TAG
+                docker rm -f myapp || true
+                docker run -d -p 8080:8080 --name myapp $DOCKER_IMAGE:$DOCKER_TAG
                 '''
             }
         }
