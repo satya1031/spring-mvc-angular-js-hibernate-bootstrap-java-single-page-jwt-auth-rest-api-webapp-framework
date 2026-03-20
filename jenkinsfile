@@ -1,79 +1,64 @@
 pipeline {
-agent any
+    agent any
 
-```
-tools {
-    maven 'Maven3'
-}
-
-environment {
-    DOCKER_IMAGE = "satya1031/myapp"
-    DOCKER_TAG = "${BUILD_NUMBER}"
-}
-
-stages {
-
-    stage('Clone Code') {
-        steps {
-            git branch: 'master', url: 'https://github.com/satya1031/spring-mvc-angular-js-hibernate-bootstrap-java-single-page-jwt-auth-rest-api-webapp-framework.git'
-        }
+    environment {
+        DOCKER_IMAGE = "satya1031/myapp"
+        DOCKER_TAG = "${BUILD_NUMBER}"
     }
 
-    stage('Build Jar') {
-        steps {
-            sh 'mvn clean package -DskipTests'
-        }
-    }
+    stages {
 
-    stage('Build Docker Image') {
-        steps {
-            sh '''
-            docker build -t $DOCKER_IMAGE:$DOCKER_TAG .
-            docker tag $DOCKER_IMAGE:$DOCKER_TAG $DOCKER_IMAGE:latest
-            '''
+        stage('Clone Code') {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']],
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        credentialsId: 'gitcred',
+                        url: 'https://github.com/satya1031/spring-mvc-angular-js-hibernate-bootstrap-java-single-page-jwt-auth-rest-api-webapp-framework.git'
+                    ]]
+                )
+            }
         }
-    }
 
-    stage('Login to DockerHub') {
-        steps {
-            withCredentials([usernamePassword(
-                credentialsId: 'dockerhub-cred',
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASS'
-            )]) {
-                sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+        stage('Build Jar') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $DOCKER_IMAGE:$DOCKER_TAG .'
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'hubcred',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
+                    sh 'echo $PASS | docker login -u $USER --password-stdin'
+                }
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh 'docker push $DOCKER_IMAGE:$DOCKER_TAG'
+            }
+        }
+
+        stage('Deploy Container') {
+            steps {
+                sh '''
+                docker stop myapp || true
+                docker rm myapp || true
+                docker run -d -p 8080:8080 --name myapp $DOCKER_IMAGE:$DOCKER_TAG
+                '''
             }
         }
     }
-
-    stage('Push Image') {
-        steps {
-            sh '''
-            docker push $DOCKER_IMAGE:$DOCKER_TAG
-            docker push $DOCKER_IMAGE:latest
-            '''
-        }
-    }
-
-    stage('Deploy Container') {
-        steps {
-            sh '''
-            docker stop myapp || true
-            docker rm myapp || true
-            docker run -d -p 8080:8080 --name myapp $DOCKER_IMAGE:latest
-            '''
-        }
-    }
-}
-
-post {
-    success {
-        echo "✅ App Deployed Successfully on Port 8080"
-    }
-    failure {
-        echo "❌ Pipeline Failed"
-    }
-}
-```
-
 }
