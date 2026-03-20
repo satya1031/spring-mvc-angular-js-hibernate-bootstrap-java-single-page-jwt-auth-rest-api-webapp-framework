@@ -1,15 +1,28 @@
-FROM maven:3.9.6-eclipse-temurin-17 AS builder
+# -------- Stage 1: Build WAR file --------
+FROM docker.io/library/maven:3.9.6-eclipse-temurin-17 AS builder
+
 WORKDIR /app
 
+# Copy only pom.xml first (for caching dependencies)
 COPY pom.xml .
+RUN mvn dependency:go-offline
+
+# Copy source code
 COPY src ./src
 
+# Build WAR file
 RUN mvn clean package -DskipTests
 
-FROM eclipse-temurin:17-jdk-alpine
-WORKDIR /app
 
-COPY --from=builder /app/target/*.jar app.jar
+# -------- Stage 2: Run in Tomcat --------
+FROM docker.io/library/tomcat:9.0-jdk17-temurin
+
+# Remove default apps
+RUN rm -rf /usr/local/tomcat/webapps/*
+
+# Copy WAR from builder stage
+COPY --from=builder /app/target/*.war /usr/local/tomcat/webapps/ROOT.war
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+CMD ["catalina.sh", "run"]
